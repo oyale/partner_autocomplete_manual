@@ -1,0 +1,7 @@
+[build-system]
+requires = ["whool"]
+build-backend = "whool.buildapi"
+
+[tool.whool]
+# The manifest version is the release version: no git post-version suffix.
+post_version_strategy_override = "none"

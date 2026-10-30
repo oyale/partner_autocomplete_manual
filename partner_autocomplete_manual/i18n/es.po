@@ -1,0 +1,73 @@
+# Translation of Odoo Server.
+# This file contains the translation of the following modules:
+#  * partner_autocomplete_manual
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Odoo Server 18.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"Language: es\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#. module: partner_autocomplete_manual
+#. odoo-python
+#: code:addons/partner_autocomplete_manual/models/res_partner.py:0
+msgid "Set a valid website before autocompleting."
+msgstr "Introduce un sitio web válido antes de autocompletar."
+
+#. module: partner_autocomplete_manual
+#. odoo-python
+#: code:addons/partner_autocomplete_manual/models/res_partner.py:0
+msgid "Data extracted successfully from the website domain."
+msgstr "Datos extraídos correctamente desde el dominio web."
+
+#. module: partner_autocomplete_manual
+#. odoo-python
+#: code:addons/partner_autocomplete_manual/models/res_partner.py:0
+msgid "No additional data found on the domain website."
+msgstr "No se encontraron datos adicionales en la web del dominio."
+
+#. module: partner_autocomplete_manual
+#. odoo-python
+#: code:addons/partner_autocomplete_manual/models/res_partner.py:0
+msgid "Enriched %s of %s contacts."
+msgstr "Se han enriquecido %s de %s contactos."
+
+#. module: partner_autocomplete_manual
+#. odoo-python
+#: code:addons/partner_autocomplete_manual/models/res_partner.py:0
+msgid "Web Autocomplete"
+msgstr "Autocompletado Web"
+
+#. module: partner_autocomplete_manual
+#: model_terms:ir.ui.view,arch_db:partner_autocomplete_manual.view_partner_form_domain_autocomplete
+msgid "Autocomplete"
+msgstr "Autocompletar"
+
+#. module: partner_autocomplete_manual
+#: model_terms:ir.ui.view,arch_db:partner_autocomplete_manual.view_partner_form_domain_autocomplete
+msgid "from Web"
+msgstr "desde la Web"
+
+#. module: partner_autocomplete_manual
+#: model_terms:ir.ui.view,arch_db:partner_autocomplete_manual.view_partner_form_domain_autocomplete
+msgid "Extract company name, VAT, phone, address and logo from the domain website"
+msgstr "Extraer nombre de empresa, NIF, teléfono, dirección y logo desde la web del dominio"
+
+#. module: partner_autocomplete_manual
+#: model_terms:ir.ui.view,arch_db:partner_autocomplete_manual.view_partner_form_domain_autocomplete
+msgid "Extract tax and contact data from this website"
+msgstr "Extraer datos fiscales y de contacto desde esta web"
+
+#. module: partner_autocomplete_manual
+#: model:ir.actions.server,name:partner_autocomplete_manual.action_server_partner_enrich_from_domain
+msgid "Autocomplete data from Web (No IAP)"
+msgstr "Autocompletar datos desde la Web (sin IAP)"
+

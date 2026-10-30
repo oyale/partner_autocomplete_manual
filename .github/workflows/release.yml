@@ -1,0 +1,35 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "18.0.*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # PyPI trusted publishing (OIDC)
+      contents: write # create the GitHub release
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Build package
+        working-directory: partner_autocomplete_manual
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+          python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: partner_autocomplete_manual/dist/*
+          generate_release_notes: true

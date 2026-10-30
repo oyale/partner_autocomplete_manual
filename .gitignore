@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.pre-commit/
+.*venv/
+*venv/
+.DS_Store
+
+# Packaging build artifacts
+dist/
+build/
+*.egg-info/

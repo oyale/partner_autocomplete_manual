@@ -43,6 +43,18 @@ msgstr "Se han enriquecido %s de %s contactos."
 #. module: partner_autocomplete_manual
 #. odoo-python
 #: code:addons/partner_autocomplete_manual/models/res_partner.py:0
+msgid "Queued %s of %s contacts."
+msgstr "Encolados %s de %s contactos."
+
+#. module: partner_autocomplete_manual
+#. odoo-python
+#: code:addons/partner_autocomplete_manual/models/res_partner.py:0
+msgid "No website set"
+msgstr "Sin sitio web"
+
+#. module: partner_autocomplete_manual
+#. odoo-python
+#: code:addons/partner_autocomplete_manual/models/res_partner.py:0
 msgid "Web Autocomplete"
 msgstr "Autocompletado Web"
 
@@ -70,4 +82,19 @@ msgstr "Extraer datos fiscales y de contacto desde esta web"
 #: model:ir.actions.server,name:partner_autocomplete_manual.action_server_partner_enrich_from_domain
 msgid "Autocomplete data from Web (No IAP)"
 msgstr "Autocompletar datos desde la Web (sin IAP)"
+
+#. module: partner_autocomplete_manual
+#: model:ir.model.fields.selection,name:partner_autocomplete_manual.selection__res_partner__enrich_status__pending
+msgid "Pending"
+msgstr "Pendiente"
+
+#. module: partner_autocomplete_manual
+#: model:ir.model.fields.selection,name:partner_autocomplete_manual.selection__res_partner__enrich_status__done
+msgid "Done"
+msgstr "Completado"
+
+#. module: partner_autocomplete_manual
+#: model:ir.model.fields.selection,name:partner_autocomplete_manual.selection__res_partner__enrich_status__error
+msgid "Error"
+msgstr "Error"
 

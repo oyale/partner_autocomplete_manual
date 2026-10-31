@@ -7,15 +7,25 @@ import json
 import logging
 import re
 import socket
+import time
 from urllib.parse import unquote, urljoin, urlparse
 
 import requests
 from lxml import html
-from odoo import _, models
+from odoo import _, fields, models
 from odoo.exceptions import UserError
 from PIL import Image
 
 _logger = logging.getLogger(__name__)
+
+# Bulk enrichment must not hammer other servers: a pause between contacts and a
+# longer one before hitting the same host again. Only the cron throttles.
+THROTTLE_BETWEEN_PARTNERS = 1.0
+THROTTLE_PER_DOMAIN = 2.0
+MAX_RETRY_AFTER = 30
+# Last hit per host, in-process. Reset on restart, so it only softens bursts;
+# the Retry-After retry is the real safety net.
+_LAST_HIT_PER_HOST = {}
 
 # Spanish phone: 9 digits starting with 6/7 (mobile) or 8/9 (landline). The regex
 # only delimits the CANDIDATE; the grouping shape is checked in _normalize_phone,
@@ -177,6 +187,14 @@ def _public_ip_from_hostname(hostname):
 class ResPartner(models.Model):
     _inherit = "res.partner"
 
+    enrich_status = fields.Selection(
+        [("pending", "Pending"), ("done", "Done"), ("error", "Error")],
+        string="Web autocomplete status",
+        copy=False,
+        readonly=True,
+    )
+    enrich_error = fields.Char(string="Web autocomplete error", copy=False)
+
     def _extract_clean_domain(self):
         """Return the clean root domain from the website, or False without one."""
         self.ensure_one()
@@ -209,7 +227,25 @@ class ResPartner(models.Model):
         caller re-validates each hop. The getaddrinfo patch only intercepts the
         target host and only ever returns validated global IPs, so concurrent
         requests for other hosts are unaffected.
+
+        With the `async_enrich` context (the cron), a 429/503 with a Retry-After
+        header is retried once after sleeping. The user request never sleeps.
         """
+        resp = self._pinned_get(url, timeout, headers, stream)
+        if (
+            resp is not None
+            and resp.status_code in (429, 503)
+            and self.env.context.get("async_enrich")
+        ):
+            retry_after = resp.headers.get("Retry-After", "")
+            resp.close()
+            if retry_after.isdigit():
+                time.sleep(min(int(retry_after), MAX_RETRY_AFTER))
+                resp = self._pinned_get(url, timeout, headers, stream)
+        return resp
+
+    def _pinned_get(self, url, timeout, headers, stream):
+        """One GET with the connection pinned to the validated host addresses."""
         parsed = urlparse(url or "")
         if parsed.scheme not in ("http", "https") or not parsed.hostname:
             return None
@@ -709,28 +745,30 @@ class ResPartner(models.Model):
         return False
 
     def action_enrich_from_domain(self):
-        """Enrich partners from their domain (form button or list action)."""
-        updated_count = 0
+        """Enrich a single contact now; queue a bulk selection for the cron.
 
-        for partner in self:
-            domain = partner._extract_clean_domain()
-            if not domain:
-                if len(self) == 1:
-                    raise UserError(_("Set a valid website before autocompleting."))
-                continue
-
-            if partner._enrich_partner_from_web(domain):
-                updated_count += 1
-
+        A single contact keeps the immediate feedback (success / no data / error).
+        A bulk selection is what actually blocks the worker, so it is only flagged
+        and drained later by _cron_enrich_pending. The throttle lives in the cron:
+        the user request never sleeps.
+        """
         if len(self) == 1:
+            domain = self._extract_clean_domain()
+            if not domain:
+                raise UserError(_("Set a valid website before autocompleting."))
+            updated = self._enrich_partner_from_web(domain)
+            # clear any queued state so the cron does not re-pick this contact
+            self.write({"enrich_status": "done", "enrich_error": False})
             msg = (
                 _("Data extracted successfully from the website domain.")
-                if updated_count
+                if updated
                 else _("No additional data found on the domain website.")
             )
-            notif_type = "success" if updated_count else "warning"
+            notif_type = "success" if updated else "warning"
         else:
-            msg = _("Enriched %s of %s contacts.") % (updated_count, len(self))
+            pending = self.filtered(lambda p: p._extract_clean_domain())
+            pending.write({"enrich_status": "pending", "enrich_error": False})
+            msg = _("Queued %s of %s contacts.") % (len(pending), len(self))
             notif_type = "info"
 
         return {
@@ -743,3 +781,48 @@ class ResPartner(models.Model):
                 "sticky": False,
             },
         }
+
+    def _cron_enrich_pending(self, limit=20):
+        """Drain the pending queue in small, throttled batches (run by ir.cron).
+
+        - `limit` caps a run, so the cron thread is never busy for long and the
+          worker stays free; the rest stays pending for the next run.
+        - Every partner is wrapped in its own savepoint: one failure is rolled
+          back alone and the rest of the batch still gets processed.
+        - Throttle between contacts and per host, so one domain is not hammered.
+        """
+        partners = self.with_context(async_enrich=True).search(
+            [("enrich_status", "=", "pending")], limit=limit, order="id"
+        )
+        for index, partner in enumerate(partners):
+            domain = partner._extract_clean_domain()
+            if not domain:
+                partner.write(
+                    {"enrich_status": "error", "enrich_error": _("No website set")}
+                )
+                continue
+
+            if index:
+                time.sleep(THROTTLE_BETWEEN_PARTNERS)
+            self._throttle_host(domain)
+
+            try:
+                with self.env.cr.savepoint():
+                    partner._enrich_partner_from_web(domain)
+                    partner.write({"enrich_status": "done", "enrich_error": False})
+            except Exception as err:
+                # warning, not exception: a failed contact is handled (marked
+                # error) and retried, it must not trip OCA's checklog detector
+                _logger.warning(
+                    "Async enrichment of partner %s failed: %s", partner.id, err
+                )
+                partner.write({"enrich_status": "error", "enrich_error": str(err)})
+
+    @staticmethod
+    def _throttle_host(domain):
+        """Sleep only the missing part before hitting the same host again."""
+        now = time.monotonic()
+        wait = THROTTLE_PER_DOMAIN - (now - _LAST_HIT_PER_HOST.get(domain, 0))
+        if wait > 0:
+            time.sleep(wait)
+        _LAST_HIT_PER_HOST[domain] = time.monotonic()

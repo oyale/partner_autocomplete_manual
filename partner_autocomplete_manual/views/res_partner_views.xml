@@ -30,6 +30,19 @@
                     class="btn-link ps-0 pt-0 pb-0"
                     invisible="not website"
                 />
+                <field
+                    name="enrich_status"
+                    widget="badge"
+                    decoration-success="enrich_status == 'done'"
+                    decoration-warning="enrich_status == 'pending'"
+                    decoration-danger="enrich_status == 'error'"
+                    invisible="not enrich_status"
+                />
+                <field
+                    name="enrich_error"
+                    invisible="not enrich_error"
+                    class="text-danger"
+                />
             </xpath>
         </field>
     </record>

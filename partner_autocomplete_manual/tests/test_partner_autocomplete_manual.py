@@ -198,6 +198,112 @@ class TestPartnerDomainAutocomplete(TransactionCase):
         with self.assertRaises(UserError):
             partner.action_enrich_from_domain()
 
+    def test_04b_single_contact_is_enriched_synchronously(self):
+        """One contact is enriched at once (no wait), and marked done."""
+        with patch.object(
+            type(self.Partner),
+            "_enrich_partner_from_web",
+            return_value=True,
+        ) as enrich:
+            partner = self.Partner.create(
+                {"name": "acme.es", "website": "https://acme.es"}
+            )
+            partner.action_enrich_from_domain()
+
+        self.assertEqual(enrich.call_count, 1)
+        self.assertEqual(partner.enrich_status, "done")
+        self.assertFalse(partner.enrich_error)
+
+    def test_04c_bulk_is_queued_and_drained_by_cron(self):
+        """N contacts are only flagged; the cron enriches them and clears the queue."""
+        partners = self.Partner.create(
+            [
+                {"name": "a", "website": "https://a.es"},
+                {"name": "b", "website": "https://b.es"},
+            ]
+        )
+        with patch.object(type(self.Partner), "_enrich_partner_from_web") as enrich:
+            self.Partner.browse(partners.ids).action_enrich_from_domain()
+            # nothing is fetched in the request
+            self.assertFalse(enrich.called)
+            self.assertEqual(set(partners.mapped("enrich_status")), {"pending"})
+
+            self.Partner._cron_enrich_pending(limit=20)
+
+        self.assertEqual(enrich.call_count, 2)
+        self.assertEqual(set(partners.mapped("enrich_status")), {"done"})
+
+    def test_04d_cron_marks_failures_and_keeps_going(self):
+        """A failing contact is marked error; the rest of the batch still runs."""
+        partners = self.Partner.create(
+            [
+                {"name": "ok", "website": "https://ok.es"},
+                {"name": "bad", "website": "https://bad.es"},
+            ]
+        )
+        partners.write({"enrich_status": "pending"})
+
+        def fail_on_bad(partner, domain):
+            if domain == "bad.es":
+                raise RuntimeError("boom")
+
+        with (
+            patch.object(type(self.Partner), "_enrich_partner_from_web", fail_on_bad),
+            patch.object(res_partner.time, "sleep"),
+            # the cron logs the failure; keep it out of the CI checklog scan
+            patch.object(res_partner, "_logger"),
+        ):
+            self.Partner._cron_enrich_pending(limit=20)
+
+        self.assertEqual(partners[0].enrich_status, "done")
+        self.assertEqual(partners[1].enrich_status, "error")
+        self.assertIn("boom", partners[1].enrich_error)
+
+    def test_04e_cron_throttles_repeated_hosts(self):
+        """The cron sleeps between contacts and before re-hitting a host."""
+        partners = self.Partner.create(
+            [
+                {"name": "a", "website": "https://same.es"},
+                {"name": "b", "website": "https://same.es"},
+            ]
+        )
+        partners.write({"enrich_status": "pending"})
+        res_partner._LAST_HIT_PER_HOST.clear()
+
+        with (
+            patch.object(type(self.Partner), "_enrich_partner_from_web"),
+            patch.object(res_partner.time, "sleep") as sleep,
+            patch.dict(res_partner._LAST_HIT_PER_HOST, {}, clear=True),
+        ):
+            self.Partner._cron_enrich_pending(limit=20)
+
+        # 1 pause between partners + 1 per-host wait before the second hit
+        self.assertEqual(sleep.call_count, 2)
+        first, second = (c.args[0] for c in sleep.call_args_list)
+        self.assertAlmostEqual(first, res_partner.THROTTLE_BETWEEN_PARTNERS)
+        # the per-host wait is the remaining slice, so slightly less than the max
+        self.assertGreater(second, 0)
+        self.assertLessEqual(second, res_partner.THROTTLE_PER_DOMAIN)
+
+    def test_04f_retry_after_only_honoured_in_the_cron(self):
+        """429 Retry-After sleeps only with async_enrich; the user path never waits."""
+        throttled = MagicMock()
+        throttled.status_code = 429
+        throttled.headers = {"Retry-After": "5"}
+        throttled.close = MagicMock()
+
+        with (
+            patch.object(type(self.Partner), "_pinned_get", return_value=throttled),
+            patch.object(res_partner.time, "sleep") as sleep,
+        ):
+            self.Partner._safe_get("https://acme.es", 4, {})
+            self.assertFalse(sleep.called)
+
+            self.Partner.with_context(async_enrich=True)._safe_get(
+                "https://acme.es", 4, {}
+            )
+            sleep.assert_called_once_with(5)
+
     def test_05_vat_country_follows_domain_language(self):
         """A VAT without prefix is Spanish on .cat/.gal/.eus and Portuguese on .pt."""
         es_urls = (

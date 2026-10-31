@@ -4,7 +4,7 @@
     "name": "Partner Autocomplete Manual (No IAP)",
     "summary": "Autocomplete company name, VAT, phone, address and logo from the "
     "contact's website, without Odoo IAP.",
-    "version": "18.0.1.0.0",
+    "version": "18.0.1.0.1",
     "category": "Contacts",
     "author": "Pelayo García",
     "maintainers": ["oyale"],
@@ -19,6 +19,7 @@
         "python": ["requests", "lxml", "Pillow"],
     },
     "data": [
+        "data/ir_cron.xml",
         "views/res_partner_views.xml",
     ],
     "installable": True,
